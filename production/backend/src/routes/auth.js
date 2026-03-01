@@ -38,9 +38,10 @@ router.post('/login', async (req, res) => {
     const { email, password } = req.body;
     if (!email || !password) return res.status(400).json({ error: 'email and password required' });
     const r = await pool.query(
-      `SELECT c.client_id, c.username, c.email, c.password_hash, c.is_admin, c.client_role_id, cr.client_role
+      `SELECT c.client_id, c.username, c.email, c.password_hash, c.is_admin, c.client_role_id, cr.client_role, c.location_id, l.location_name
        FROM client c
        JOIN client_role cr ON c.client_role_id = cr.client_role_id
+       LEFT JOIN location l ON c.location_id = l.location_id
        WHERE (c.email = $1 OR c.username = $1) AND c.active = TRUE`,
       [email.trim()]
     );
@@ -54,7 +55,7 @@ router.post('/login', async (req, res) => {
     res.json({
       access_token: access,
       refresh_token: refresh,
-      user: { client_id: r.rows[0].client_id, username: r.rows[0].username, email: r.rows[0].email, is_admin: r.rows[0].is_admin, client_role_id: r.rows[0].client_role_id, client_role: r.rows[0].client_role },
+      user: { client_id: r.rows[0].client_id, username: r.rows[0].username, email: r.rows[0].email, is_admin: r.rows[0].is_admin, client_role_id: r.rows[0].client_role_id, client_role: r.rows[0].client_role, location_id: r.rows[0].location_id, location_name: r.rows[0].location_name },
     });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -119,6 +120,33 @@ router.get('/me', verifyToken, (req, res) => {
   res.json(req.user);
 });
 
+router.post('/change-password', verifyToken, async (req, res) => {
+  try {
+    const { current_password, new_password } = req.body;
+    if (!current_password || !new_password) {
+      return res.status(400).json({ error: 'current_password and new_password required' });
+    }
+    if (String(new_password).length < 6) {
+      return res.status(400).json({ error: 'New password must be at least 6 characters' });
+    }
+    const r = await pool.query(
+      'SELECT password_hash FROM client WHERE client_id = $1 AND active = TRUE',
+      [req.user.client_id]
+    );
+    if (r.rows.length === 0) return res.status(401).json({ error: 'User not found' });
+    const match = await bcrypt.compare(current_password, r.rows[0].password_hash);
+    if (!match) return res.status(401).json({ error: 'Current password is incorrect' });
+    const hash = await bcrypt.hash(new_password, 10);
+    await pool.query(
+      'UPDATE client SET password_hash = $1, updated_at = NOW() WHERE client_id = $2',
+      [hash, req.user.client_id]
+    );
+    res.json({ message: 'Password updated' });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 router.patch('/me', verifyToken, async (req, res) => {
   try {
     const { username, email, whatsapp, country_code, location_id } = req.body;
@@ -137,7 +165,10 @@ router.patch('/me', verifyToken, async (req, res) => {
       values
     );
     const r = await pool.query(
-      'SELECT client_id, username, email, is_admin, client_role_id, location_id, whatsapp, country_code FROM client WHERE client_id = $1',
+      `SELECT c.client_id, c.username, c.email, is_admin, c.client_role_id, c.location_id, c.whatsapp, c.country_code, l.location_name
+       FROM client c
+       LEFT JOIN location l ON c.location_id = l.location_id
+       WHERE c.client_id = $1`,
       [req.user.client_id]
     );
     const roleRow = await pool.query('SELECT client_role FROM client_role WHERE client_role_id = $1', [r.rows[0].client_role_id]);

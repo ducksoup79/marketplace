@@ -12,7 +12,11 @@ async function verifyToken(req, res, next) {
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
     const r = await pool.query(
-      'SELECT c.client_id, c.username, c.email, is_admin, c.client_role_id, c.location_id, c.whatsapp, c.country_code, cr.client_role FROM client c JOIN client_role cr ON c.client_role_id = cr.client_role_id WHERE c.client_id = $1 AND c.active = TRUE',
+      `SELECT c.client_id, c.username, c.email, is_admin, c.client_role_id, c.location_id, c.whatsapp, c.country_code, cr.client_role, l.location_name
+       FROM client c
+       JOIN client_role cr ON c.client_role_id = cr.client_role_id
+       LEFT JOIN location l ON c.location_id = l.location_id
+       WHERE c.client_id = $1 AND c.active = TRUE`,
       [decoded.sub]
     );
     if (r.rows.length === 0) return res.status(401).json({ error: 'User not found' });

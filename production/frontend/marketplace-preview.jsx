@@ -97,8 +97,9 @@ const css = `
     position: relative; z-index: 100; flex-shrink: 0;
     box-shadow: var(--shadow-sm);
   }
-  .header-logo { font-family: var(--font-disp); font-size: 22px; color: var(--accent); font-weight: 700; cursor: pointer; }
+  .header-logo { font-family: var(--font-disp); font-size: 22px; color: var(--accent); font-weight: 700; cursor: pointer; display: flex; flex-direction: column; align-items: flex-start; line-height: 1.2; }
   .header-logo span { color: var(--text3); font-weight: 600; font-size: 18px; }
+  .header-logo-sub { font-size: 12px; font-weight: 400; color: var(--text3); margin-top: 2px; }
   .header-spacer { flex: 1; }
   .header-user {
     display: flex; align-items: center; gap: 10px; cursor: pointer;
@@ -457,6 +458,7 @@ const css = `
     .header { padding: 0 12px; gap: 8px; }
     .header-logo { font-size: 18px; }
     .header-logo span { font-size: 15px; }
+    .header-logo-sub { font-size: 11px; }
     .header-user span { display: none; }
     .header-menu-btn { display: flex; }
     .body { position: relative; }
@@ -927,7 +929,7 @@ function ProductsPage({ setScreen, user, setEditListingId, setReturnTo, setMessa
     <div className="page">
       <div className="page-header">
         <div>
-          <div className="page-title">Marketplace</div>
+          <div className="page-title">Mmaraka</div>
           <div className="page-subtitle">Browse and discover second-hand items near you</div>
         </div>
         <button className="btn btn-primary" onClick={()=>{ setReturnTo?.("products"); setEditListingId(null); setScreen("add-product"); }}>＋ Add Listing</button>
@@ -1387,7 +1389,7 @@ function MyListingsPage({ user, setScreen, setEditListingId, setEditServiceId, s
 
       <div className="settings-title" style={{marginTop:24,marginBottom:12}}>Product listings</div>
       {myProducts.length === 0 ? (
-        <div className="empty"><div className="empty-icon">📦</div><div className="empty-title">No product listings yet</div><div className="empty-sub">Add an item from the Marketplace or use the button above</div></div>
+        <div className="empty"><div className="empty-icon">📦</div><div className="empty-title">No product listings yet</div><div className="empty-sub">Add an item from Mmaraka or use the button above</div></div>
       ) : (
         <div className="product-grid">
           {myProducts.map((p) => (
@@ -1580,6 +1582,11 @@ function SettingsPage({ user, setScreen, onProfileUpdate }) {
   const [paypalError, setPaypalError] = useState(null);
   const [upgradeSuccess, setUpgradeSuccess] = useState(null);
   const paypalContainerRef = useRef(null);
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [passwordError, setPasswordError] = useState(null);
+  const [passwordSaving, setPasswordSaving] = useState(false);
 
   useEffect(() => {
     if (tab !== "profile") return;
@@ -1837,19 +1844,45 @@ function SettingsPage({ user, setScreen, onProfileUpdate }) {
           <div className="settings-section">
             <div className="settings-title">Change Password</div>
             <div className="form-grid" style={{gap:14}}>
+              {passwordError && <div className="alert alert-danger">{passwordError}</div>}
               <div className="form-group">
                 <label className="form-label">Current password</label>
-                <input className="form-input" type="password" placeholder="••••••••" />
+                <input className="form-input" type="password" placeholder="••••••••" value={currentPassword} onChange={e=>{ setCurrentPassword(e.target.value); setPasswordError(null); }} />
               </div>
               <div className="form-group">
                 <label className="form-label">New password</label>
-                <input className="form-input" type="password" placeholder="Min. 6 characters" />
+                <input className="form-input" type="password" placeholder="Min. 6 characters" value={newPassword} onChange={e=>{ setNewPassword(e.target.value); setPasswordError(null); }} />
               </div>
               <div className="form-group">
                 <label className="form-label">Confirm new password</label>
-                <input className="form-input" type="password" placeholder="••••••••" />
+                <input className="form-input" type="password" placeholder="••••••••" value={confirmPassword} onChange={e=>{ setConfirmPassword(e.target.value); setPasswordError(null); }} />
               </div>
-              <button className="btn btn-primary" style={{width:"fit-content"}} onClick={()=>toast("✅ Password changed!", "success")}>Update Password</button>
+              <button
+                className="btn btn-primary"
+                style={{width:"fit-content"}}
+                disabled={passwordSaving}
+                onClick={async () => {
+                  setPasswordError(null);
+                  if (!currentPassword.trim()) { setPasswordError("Enter your current password"); return; }
+                  if (newPassword.length < 6) { setPasswordError("New password must be at least 6 characters"); return; }
+                  if (newPassword !== confirmPassword) { setPasswordError("New password and confirmation do not match"); return; }
+                  setPasswordSaving(true);
+                  try {
+                    await api("/api/auth/change-password", {
+                      method: "POST",
+                      body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
+                    });
+                    setCurrentPassword(""); setNewPassword(""); setConfirmPassword("");
+                    toast("Password updated successfully", "success");
+                  } catch (err) {
+                    setPasswordError(err.message || "Failed to update password");
+                  } finally {
+                    setPasswordSaving(false);
+                  }
+                }}
+              >
+                {passwordSaving ? "Updating…" : "Update Password"}
+              </button>
             </div>
           </div>
         </div>
@@ -2193,7 +2226,7 @@ function AdminPage() {
   return (
     <div className="page">
       <div className="page-header">
-        <div><div className="page-title">Admin Dashboard</div><div className="page-subtitle">Manage the MarketPlace platform</div></div>
+        <div><div className="page-title">Admin Dashboard</div><div className="page-subtitle">Manage the Mmaraka platform</div></div>
       </div>
 
       <div className="tabs">
@@ -2740,7 +2773,7 @@ function MessagesPage({ user, setScreen, openWithClientId, clearOpenWithClientId
             notifiedUnreadRef.current.add(c.other_id);
             if (typeof window !== "undefined" && window.Notification && Notification.permission === "granted") {
               try {
-                new Notification("MarketPlace", { body: `New message from @${c.other_username}` });
+                new Notification("Mmaraka", { body: `New message from @${c.other_username}` });
               } catch (_) {}
             }
           }
@@ -3064,29 +3097,29 @@ function TermsPage({ setScreen }) {
   return (
     <div className="page">
       <div className="page-header">
-        <div><div className="page-title">Terms & Conditions</div><div className="page-subtitle">Please read carefully before using MarketPlace</div></div>
-        <button className="btn btn-primary" onClick={()=>setScreen("products")}>Back to Marketplace</button>
+        <div><div className="page-title">Terms & Conditions</div><div className="page-subtitle">Please read carefully before using Mmaraka</div></div>
+        <button className="btn btn-primary" onClick={()=>setScreen("products")}>Back to Mmaraka</button>
       </div>
       <div className="card" style={{padding:"28px 32px",maxWidth:700}}>
         <div className="terms-body">
           <h3>1. Acceptance of Terms</h3>
-          <p>By accessing or using MarketPlace, you agree to be bound by these terms. If you do not agree, please do not use the platform.</p>
-          <h3>2. Marketplace Role</h3>
-          <p>MarketPlace is a platform that facilitates peer-to-peer buying and selling of second-hand goods. We do not process payments or act as a party to any transaction between buyers and sellers.</p>
+          <p>By accessing or using Mmaraka, you agree to be bound by these terms. If you do not agree, please do not use the platform.</p>
+          <h3>2. Mmaraka Role</h3>
+          <p>Mmaraka is a platform that facilitates peer-to-peer buying and selling of second-hand goods. We do not process payments or act as a party to any transaction between buyers and sellers.</p>
           <h3>3. User Accounts</h3>
           <p>You must be 18 years or older to register. You are responsible for keeping your credentials secure. Each person may hold one account only.</p>
           <h3>4. Listings</h3>
           <p>All product listings are the sole responsibility of the seller. Listings remain active for 3 days and may be reinstated up to 2 times. After the reinstatement limit is reached or 7 days of dormancy, listings are permanently removed.</p>
           <h3>5. Prohibited Content</h3>
-          <p>You may not list illegal items, counterfeit goods, stolen property, or any item that violates applicable laws. MarketPlace reserves the right to remove any listing and suspend any account at its sole discretion.</p>
+          <p>You may not list illegal items, counterfeit goods, stolen property, or any item that violates applicable laws. Mmaraka reserves the right to remove any listing and suspend any account at its sole discretion.</p>
           <h3>6. Services Directory</h3>
-          <p>Service listings are advertising tools only. MarketPlace does not vet, endorse, or guarantee any service provider or the quality of their work.</p>
+          <p>Service listings are advertising tools only. Mmaraka does not vet, endorse, or guarantee any service provider or the quality of their work.</p>
           <h3>7. Subscriptions</h3>
           <p>Subscription fees are charged in the local currency of your registered location. Fees are non-refundable. Subscription benefits apply to listing placement and advertising visibility only.</p>
           <h3>8. Privacy</h3>
           <p>We collect only the data necessary to operate the platform. We do not sell personal data to third parties. Advertising on the platform is served through the service listings you interact with.</p>
           <h3>9. Limitation of Liability</h3>
-          <p>MarketPlace is not liable for any transaction, dispute, loss, or damage arising from use of the platform. Users transact entirely at their own risk.</p>
+          <p>Mmaraka is not liable for any transaction, dispute, loss, or damage arising from use of the platform. Users transact entirely at their own risk.</p>
           <h3>10. Changes to Terms</h3>
           <p>We may update these terms at any time. Continued use of the platform constitutes acceptance of updated terms.</p>
         </div>
@@ -3104,6 +3137,13 @@ function AuthScreen({ onLogin }) {
   const [errors, setErrors] = useState({});
   const [pwdStrength, setPwdStrength] = useState(0);
   const set = (k,v) => setForm(f=>({...f,[k]:v}));
+
+  useEffect(() => {
+    if (mode === "login") {
+      setForm(f => ({ ...f, email: "", password: "" }));
+      setErrors({});
+    }
+  }, [mode]);
 
   useEffect(() => {
     if (mode !== "signup") return;
@@ -3134,6 +3174,8 @@ function AuthScreen({ onLogin }) {
         client_id: data.user.client_id,
         client_role_id: data.user.client_role_id,
         client_role: data.user.client_role,
+        location_id: data.user.location_id,
+        location_name: data.user.location_name,
       });
     } catch (err) {
       setErrors({ login: err.message || "Invalid credentials" });
@@ -3179,14 +3221,14 @@ function AuthScreen({ onLogin }) {
       <div className="login-left">
         <div className="login-brand">
           <div className="login-illustration">🛒</div>
-          <div className="login-brand-name">MarketPlace</div>
+          <div className="login-brand-name">Mmaraka</div>
           <div className="login-brand-tagline">Your local second-hand marketplace.<br/>Buy, sell, and discover services near you.</div>
         </div>
       </div>
       <div className="login-right">
         {mode==="login" && <>
           <div className="login-title">Welcome back</div>
-          <div className="login-sub">Sign in to your MarketPlace account</div>
+          <div className="login-sub">Sign in to your Mmaraka account</div>
           {errors.login && <div className="alert alert-danger" style={{width:"100%"}}>{errors.login}</div>}
           <div className="login-form">
             <div className="form-group">
@@ -3199,7 +3241,6 @@ function AuthScreen({ onLogin }) {
               <div className="forgot-link" onClick={()=>setMode("forgot")}>Forgot password?</div>
             </div>
             <button className="btn btn-primary w-full" onClick={handleLogin}>Sign In</button>
-            <p style={{fontSize:12,color:"var(--text3)",textAlign:"center"}}>Admin? Use <strong>admin</strong> or <strong>admin@marketplace.com</strong> with password <strong>admin123</strong></p>
           </div>
           <div className="login-switch">Don't have an account? <a onClick={()=>{setErrors({});setMode("signup")}}>Sign up</a></div>
         </>}
@@ -3282,11 +3323,11 @@ function AuthScreen({ onLogin }) {
           <div className="login-title" style={{fontSize:22}}>Terms & Conditions</div>
           <div style={{overflow:"auto",flex:1,marginTop:16,fontSize:13,color:"var(--text2)",lineHeight:1.7}}>
             <p><strong>1. Acceptance</strong> — By signing up you agree to these terms.</p>
-            <p><strong>2. Marketplace Role</strong> — We facilitate listings only; we do not process payments or guarantee transactions.</p>
+            <p><strong>2. Mmaraka Role</strong> — We facilitate listings only; we do not process payments or guarantee transactions.</p>
             <p><strong>3. Listings</strong> — Active for 3 days, reinstatable up to 2 times, deleted after 7 dormant days.</p>
             <p><strong>4. Prohibited Items</strong> — No illegal, stolen, or counterfeit goods. Violations result in account suspension.</p>
             <p><strong>5. Privacy</strong> — Your data is used only to operate the platform and is never sold to third parties.</p>
-            <p><strong>6. Liability</strong> — MarketPlace bears no liability for transactions, disputes, or losses.</p>
+            <p><strong>6. Liability</strong> — Mmaraka bears no liability for transactions, disputes, or losses.</p>
           </div>
           <button className="btn btn-outline" style={{marginTop:20,width:"100%"}} onClick={()=>setMode("signup")}>← Back to Sign Up</button>
         </>}
@@ -3297,7 +3338,7 @@ function AuthScreen({ onLogin }) {
 
 // ─── App Shell ────────────────────────────────────────────────────────────────
 const NAV = [
-  { id:"products",    label:"Marketplace",  icon:"🛍️" },
+  { id:"products",    label:"Mmaraka",  icon:"🛍️" },
   { id:"services",    label:"Services",     icon:"🏢" },
   { id:"my-listings", label:"My Listings",  icon:"📋" },
   { id:"messages",    label:"Messages",     icon:"💬" },
@@ -3329,6 +3370,8 @@ export default function App() {
           client_id: u.client_id,
           client_role_id: u.client_role_id,
           client_role: u.client_role,
+          location_id: u.location_id,
+          location_name: u.location_name,
         });
       })
       .catch(() => {
@@ -3385,7 +3428,7 @@ export default function App() {
       case "add-service": return <AddServicePage setScreen={setScreen} editServiceId={editServiceId} setEditServiceId={setEditServiceId} returnTo={returnTo ?? "services"} />;
       case "my-listings": return <MyListingsPage user={user} setScreen={setScreen} setEditListingId={setEditListingId} setEditServiceId={setEditServiceId} setReturnTo={setReturnTo} setMessageWithClientId={setMessageWithClientId} />;
       case "messages":    return <MessagesPage user={user} setScreen={setScreen} openWithClientId={messageWithClientId} clearOpenWithClientId={()=>setMessageWithClientId(null)} onUnreadChange={setMessagesUnreadCount} />;
-      case "settings":    return <SettingsPage user={user} setScreen={setScreen} onProfileUpdate={u => { if (u && Object.keys(u).length === 0) { api("/api/auth/me").then(me => setUser(prev => ({ ...prev, name: me.username, email: me.email, client_id: me.client_id, client_role_id: me.client_role_id, client_role: me.client_role, isAdmin: !!me.is_admin }))); } else if (u) setUser(prev => ({ ...prev, ...u })); }} />;
+      case "settings":    return <SettingsPage user={user} setScreen={setScreen} onProfileUpdate={u => { if (u && Object.keys(u).length === 0) { api("/api/auth/me").then(me => setUser(prev => ({ ...prev, name: me.username, email: me.email, client_id: me.client_id, client_role_id: me.client_role_id, client_role: me.client_role, isAdmin: !!me.is_admin, location_id: me.location_id, location_name: me.location_name }))); } else if (u) setUser(prev => ({ ...prev, ...u })); }} />;
       case "report":      return <ReportPage setScreen={setScreen} />;
       case "terms":       return <TermsPage setScreen={setScreen} />;
       case "admin":       return <AdminPage />;
@@ -3402,7 +3445,8 @@ export default function App() {
         <header className="header">
           <button type="button" className="header-menu-btn" onClick={() => setSidebarOpen(true)} aria-label="Open menu">☰</button>
           <div className="header-logo" onClick={()=>setScreen("products")}>
-            MarketPlace <span>BWP</span>
+            Mmaraka
+            {user.location_name && <span className="header-logo-sub">{user.location_name}</span>}
           </div>
           <div className="header-spacer" />
           {user.isAdmin && <span className="chip chip-avail" style={{fontSize:11}}>Admin</span>}
