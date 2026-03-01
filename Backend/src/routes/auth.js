@@ -38,7 +38,10 @@ router.post('/login', async (req, res) => {
     const { email, password } = req.body;
     if (!email || !password) return res.status(400).json({ error: 'email and password required' });
     const r = await pool.query(
-      'SELECT client_id, username, email, password_hash, is_admin FROM client WHERE (email = $1 OR username = $1) AND active = TRUE',
+      `SELECT c.client_id, c.username, c.email, c.password_hash, c.is_admin, c.client_role_id, cr.client_role
+       FROM client c
+       JOIN client_role cr ON c.client_role_id = cr.client_role_id
+       WHERE (c.email = $1 OR c.username = $1) AND c.active = TRUE`,
       [email.trim()]
     );
     if (r.rows.length === 0) return res.status(401).json({ error: 'Invalid credentials' });
@@ -51,7 +54,7 @@ router.post('/login', async (req, res) => {
     res.json({
       access_token: access,
       refresh_token: refresh,
-      user: { client_id: r.rows[0].client_id, username: r.rows[0].username, email: r.rows[0].email, is_admin: r.rows[0].is_admin },
+      user: { client_id: r.rows[0].client_id, username: r.rows[0].username, email: r.rows[0].email, is_admin: r.rows[0].is_admin, client_role_id: r.rows[0].client_role_id, client_role: r.rows[0].client_role },
     });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -137,7 +140,9 @@ router.patch('/me', verifyToken, async (req, res) => {
       'SELECT client_id, username, email, is_admin, client_role_id, location_id, whatsapp, country_code FROM client WHERE client_id = $1',
       [req.user.client_id]
     );
-    res.json(r.rows[0]);
+    const roleRow = await pool.query('SELECT client_role FROM client_role WHERE client_role_id = $1', [r.rows[0].client_role_id]);
+    const out = { ...r.rows[0], client_role: roleRow.rows[0]?.client_role };
+    res.json(out);
   } catch (e) {
     if (e.code === '23505') return res.status(409).json({ error: 'Username or email already in use' });
     res.status(500).json({ error: e.message });

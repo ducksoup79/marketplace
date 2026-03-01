@@ -45,6 +45,13 @@ router.post('/', verifyToken, async (req, res) => {
   try {
     const { service_name, service_description, service_logo_path } = req.body;
     if (!service_name) return res.status(400).json({ error: 'service_name required' });
+    const existing = await pool.query(
+      'SELECT service_id FROM service WHERE client_id = $1 LIMIT 1',
+      [req.user.client_id]
+    );
+    if (existing.rows.length > 0) {
+      return res.status(400).json({ error: 'You can only list one service. Edit or delete your existing service first.' });
+    }
     const roleRes = await pool.query(
       'SELECT listing_priority FROM client_role WHERE client_role_id = $1',
       [req.user.client_role_id]

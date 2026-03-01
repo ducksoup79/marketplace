@@ -23,6 +23,29 @@ router.get('/', async (req, res) => {
   }
 });
 
+// All of the logged-in client's listings (avail, sold, dormant) for My Listings page
+router.get('/mine', verifyToken, async (req, res) => {
+  try {
+    const r = await pool.query(
+      `SELECT pl.listing_id, pl.product_id, pl.client_id, pl.buyer_id, pl.status, pl.listing_date, pl.listing_expires_at, pl.product_position,
+              p.product_name, p.product_description, p.product_image_path, p.product_price, p.category_id,
+              pc.category_name, c.username AS seller_username,
+              buyer.username AS buyer_username
+       FROM product_listing pl
+       JOIN product p ON p.product_id = pl.product_id
+       JOIN product_category pc ON pc.category_id = p.category_id
+       JOIN client c ON c.client_id = pl.client_id
+       LEFT JOIN client buyer ON buyer.client_id = pl.buyer_id
+       WHERE pl.client_id = $1
+       ORDER BY pl.listing_date DESC`,
+      [req.user.client_id]
+    );
+    res.json(r.rows);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 router.get('/:id', async (req, res) => {
   try {
     const id = parseInt(req.params.id, 10);
@@ -85,11 +108,24 @@ router.patch('/:id/buy', verifyToken, async (req, res) => {
       `UPDATE product_listing
        SET status = 'sold', buyer_id = $2, updated_at = NOW()
        WHERE listing_id = $1 AND status = 'avail'
-       RETURNING listing_id, product_id, status, updated_at`,
+       RETURNING listing_id, product_id, client_id, status, updated_at`,
       [id, req.user.client_id]
     );
     if (r.rows.length === 0) return res.status(404).json({ error: 'Listing not found or already sold' });
-    res.json(r.rows[0]);
+    const row = r.rows[0];
+    const sellerId = row.client_id;
+    const buyerId = req.user.client_id;
+    const productId = row.product_id;
+    const productRow = await pool.query('SELECT product_name FROM product WHERE product_id = $1', [productId]);
+    const productName = productRow.rows[0]?.product_name || 'your item';
+    const buyerRow = await pool.query('SELECT username FROM client WHERE client_id = $1', [buyerId]);
+    const buyerUsername = buyerRow.rows[0]?.username || 'A buyer';
+    const messageBody = `I've bought your listing: "${productName}". You can arrange handover via Messages. — @${buyerUsername}`;
+    await pool.query(
+      'INSERT INTO message (sender_id, recipient_id, body) VALUES ($1, $2, $3)',
+      [buyerId, sellerId, messageBody]
+    );
+    res.json(row);
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -99,7 +135,7 @@ router.patch('/:id', verifyToken, async (req, res) => {
   try {
     const id = parseInt(req.params.id, 10);
     if (!Number.isFinite(id)) return res.status(400).json({ error: 'Invalid listing id' });
-    const { product_name, product_description, product_image_path, product_price, category_id } = req.body;
+    const { product_name, product_description, product_image_path, product_price, category_id, status } = req.body;
     const listing = await pool.query(
       'SELECT listing_id, product_id, client_id FROM product_listing WHERE listing_id = $1',
       [id]
@@ -114,6 +150,22 @@ router.patch('/:id', verifyToken, async (req, res) => {
        WHERE product_id = $6`,
       [product_name ?? null, product_description ?? null, product_image_path ?? null, product_price ?? null, category_id ?? null, product_id]
     );
+    if (status !== undefined && status !== null) {
+      const s = String(status).toLowerCase();
+      if (['avail', 'sold', 'dormant'].includes(s)) {
+        if (s === 'avail') {
+          await pool.query(
+            `UPDATE product_listing SET status = 'avail', buyer_id = NULL, listing_expires_at = NOW() + INTERVAL '3 days', updated_at = NOW() WHERE listing_id = $1`,
+            [id]
+          );
+        } else {
+          await pool.query(
+            `UPDATE product_listing SET status = $1, updated_at = NOW() WHERE listing_id = $2`,
+            [s, id]
+          );
+        }
+      }
+    }
     const r = await pool.query(
       `SELECT pl.listing_id, pl.product_id, pl.client_id, pl.status,
                p.product_name, p.product_description, p.product_image_path, p.product_price, p.category_id,
