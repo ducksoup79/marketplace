@@ -336,13 +336,29 @@ router.get('/tables', (req, res) => {
 // Error reports list (with reporter username) for admin panel
 router.get('/reports', async (req, res) => {
   try {
-    const r = await pool.query(
-      `SELECT er.report_id, er.client_id, er.subject, er.description, er.screenshot_path, er.resolved, er.submitted_at,
-              c.username AS reporter_username
-       FROM error_report er
-       LEFT JOIN client c ON er.client_id = c.client_id
-       ORDER BY er.submitted_at DESC`
-    );
+    let r;
+    try {
+      r = await pool.query(
+        `SELECT er.report_id, er.client_id, er.subject, er.description, er.screenshot_path, er.resolved, er.submitted_at,
+                c.username AS reporter_username
+         FROM error_report er
+         LEFT JOIN client c ON er.client_id = c.client_id
+         ORDER BY er.submitted_at DESC`
+      );
+    } catch (colErr) {
+      if (/column.*screenshot_path.*does not exist/i.test(colErr.message)) {
+        r = await pool.query(
+          `SELECT er.report_id, er.client_id, er.subject, er.description, er.resolved, er.submitted_at,
+                  c.username AS reporter_username
+           FROM error_report er
+           LEFT JOIN client c ON er.client_id = c.client_id
+           ORDER BY er.submitted_at DESC`
+        );
+        r.rows = r.rows.map((row) => ({ ...row, screenshot_path: null }));
+      } else {
+        throw colErr;
+      }
+    }
     res.json(r.rows);
   } catch (e) {
     res.status(500).json({ error: e.message });

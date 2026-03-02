@@ -17,9 +17,22 @@ router.get('/locations', async (req, res) => {
 
 router.get('/roles', async (req, res) => {
   try {
-    const r = await pool.query(
-      'SELECT client_role_id, client_role, sub_price, listing_priority, plan_description, plan_features FROM client_role ORDER BY listing_priority'
-    );
+    let r;
+    try {
+      r = await pool.query(
+        'SELECT client_role_id, client_role, sub_price, listing_priority, plan_description, plan_features FROM client_role ORDER BY listing_priority'
+      );
+    } catch (colErr) {
+      // Deployed DB may not have plan_description/plan_features yet; run migrations/run-plan-description-features.js
+      if (/column.*does not exist/i.test(colErr.message)) {
+        r = await pool.query(
+          'SELECT client_role_id, client_role, sub_price, listing_priority FROM client_role ORDER BY listing_priority'
+        );
+        r.rows = r.rows.map((row) => ({ ...row, plan_description: null, plan_features: [] }));
+      } else {
+        throw colErr;
+      }
+    }
     const rows = r.rows.map((row) => {
       const out = { ...row };
       if (out.plan_features != null && typeof out.plan_features === 'string') {
@@ -76,11 +89,24 @@ router.post('/report-error', verifyToken, async (req, res) => {
   try {
     const { subject, description, screenshot_path } = req.body;
     if (!description) return res.status(400).json({ error: 'description required' });
-    const reportRes = await pool.query(
-      `INSERT INTO error_report (client_id, subject, description, screenshot_path)
-       VALUES ($1, $2, $3, $4) RETURNING report_id`,
-      [req.user.client_id, subject || null, description, screenshot_path || null]
-    );
+    let reportRes;
+    try {
+      reportRes = await pool.query(
+        `INSERT INTO error_report (client_id, subject, description, screenshot_path)
+         VALUES ($1, $2, $3, $4) RETURNING report_id`,
+        [req.user.client_id, subject || null, description, screenshot_path || null]
+      );
+    } catch (colErr) {
+      if (/column.*screenshot_path.*does not exist/i.test(colErr.message)) {
+        reportRes = await pool.query(
+          `INSERT INTO error_report (client_id, subject, description)
+           VALUES ($1, $2, $3) RETURNING report_id`,
+          [req.user.client_id, subject || null, description]
+        );
+      } else {
+        throw colErr;
+      }
+    }
     const reportId = reportRes.rows[0]?.report_id;
     const reporter = await pool.query('SELECT username FROM client WHERE client_id = $1', [req.user.client_id]);
     const reporterName = reporter.rows[0]?.username || 'A user';

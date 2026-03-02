@@ -3132,7 +3132,7 @@ function TermsPage({ setScreen }) {
 function AuthScreen({ onLogin }) {
   const { toast } = useNotifications();
   const [mode, setMode] = useState("login"); // login | signup | forgot
-  const [form, setForm] = useState({ username:"", email:"", password:"", password2:"", whatsapp:"", location:"", location_id: null, role:"Basic", terms:false, countryCode:"+267" });
+  const [form, setForm] = useState({ username:"", email:"", password:"", password2:"", whatsapp:"", location:"", location_id: null, terms:false, countryCode:"+267" });
   const [locations, setLocations] = useState([]);
   const [errors, setErrors] = useState({});
   const [pwdStrength, setPwdStrength] = useState(0);
@@ -3289,12 +3289,6 @@ function AuthScreen({ onLogin }) {
                 {locations.map(l=> <option key={l.location_id} value={l.location_id}>{l.location_name}</option>)}
               </select>
             </div>
-              <div className="form-group">
-                <label className="form-label">Plan</label>
-                <select className="form-select" value={form.role} onChange={e=>set("role",e.target.value)}>
-                  <option>Basic</option><option>Silver</option><option>Diamond</option>
-                </select>
-              </div>
             </div>
             <div className="checkbox-row">
               <input type="checkbox" id="terms" checked={form.terms} onChange={e=>set("terms",e.target.checked)} />

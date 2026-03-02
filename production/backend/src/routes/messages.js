@@ -174,7 +174,7 @@ router.delete('/conversations/:withId', async (req, res) => {
   try {
     const me = req.user.client_id;
     const withId = parseInt(req.params.withId, 10);
-    if (!Number.isFinite(withId) || withId === me) {
+    if (!Number.isFinite(withId)) {
       return res.status(400).json({ error: 'Invalid conversation' });
     }
     const r = await pool.query(
